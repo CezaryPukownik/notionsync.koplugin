@@ -29,9 +29,58 @@ function GetHighlights.transform(doc, raw_annotations)
         logger.info("NotionSync DocInfo: NIL")
     end
 
-    local book_title = props.title or "Unknown Title"
+    local book_title = nil
+    
+    -- Try to get title from props
+    if props and props.title then
+        book_title = props.title
+    end
+    
+    -- Fallback 1: Try doc.info
+    if (not book_title or book_title == "") and doc.info then
+        if doc.info.title then
+            book_title = doc.info.title
+        elseif doc.info.summary and doc.info.summary.title then
+            book_title = doc.info.summary.title
+        end
+    end
+    
+    -- Fallback 2: Try to get from docsettings
+    if not book_title or book_title == "" then
+        local file_path = doc.file or ""
+        if file_path ~= "" then
+            pcall(function()
+                local DocSettings = require("docsettings")
+                local doc_settings = DocSettings:open(file_path)
+                if doc_settings then
+                    -- Try various metadata locations in docsettings
+                    local metadata = doc_settings:readSetting("doc_props") 
+                        or doc_settings:readSetting("metadata")
+                        or doc_settings:readSetting("props")
+                    
+                    if metadata then
+                        if type(metadata) == "table" and metadata.title then
+                            book_title = metadata.title
+                        end
+                    end
+                end
+            end)
+        end
+    end
+    
+    -- Fallback 3: Extract from filename
+    if (not book_title or book_title == "") and doc.file then
+        local filename = doc.file:match("([^/]+)$")
+        if filename then
+            -- Remove extension
+            book_title = filename:gsub("%.[^%.]+$", "")
+        end
+    end
+    
+    book_title = book_title or "Unknown Title"
+    
     -- Try multiple casing/plural variations for safety
-    local raw_author = props.authors or props.author or props.Authors or props.Author
+    local raw_author = props and (props.authors or props.author or props.Authors or props.Author) or nil
     local book_author = "Unknown Author"
     
     if type(raw_author) == "table" then

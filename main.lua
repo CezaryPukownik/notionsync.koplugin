@@ -239,12 +239,16 @@ function NotionSync:notify(msg)
     end)
 end
 
+-- Sync current book to notion
 function NotionSync:onSyncRequested()
+
+    -- Enable Wi-Fi if not online
     if not NetworkMgr:isOnline() then
-        self:notify("Please enable Wi-Fi.")
+        NetworkMgr:enableWifi()
         return
     end
 
+    -- Check if plugin is configured
     if not self.client or not self.config.database_id or self.config.database_id == "" then
         self:notify("Plugin not configured. Check settings.")
         self:showConfigMenu()

@@ -98,7 +98,7 @@ function NotionClient:createPage(title)
 end
 
 function NotionClient:updateLastSync(page_id, iso_date)
-    local body = { properties = { ["Last Sync"] = { date = { start = iso_date } } } }
+    local body = { properties = { ["Last Sync"] = { rich_text = {{ text = { content = iso_date } }} } } }
     return self:request("PATCH", "/pages/" .. page_id, body)
 end
 

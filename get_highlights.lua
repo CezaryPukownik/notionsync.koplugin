@@ -2,8 +2,7 @@ local md5 = require("ffi/sha2").md5
 
 local GetHighlights = {}
 
--- Main processing function
--- Returns: payload (table) OR nil
+-- Process the document and return a payload of book metadata and highlights
 function GetHighlights.transform(doc, raw_annotations)
     if not doc then return nil, "No document" end
     if not raw_annotations or next(raw_annotations) == nil then return nil, "No annotations" end
@@ -34,7 +33,7 @@ function GetHighlights.transform(doc, raw_annotations)
             chapter = item.chapter or "",
             text = item.text or "",
             page = item.pageno or item.page,
-            note = item.note, -- Lua ignores if nil
+            note = item.note,
             created_at = created_at,
             updated_at = updated_at
         }

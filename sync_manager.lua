@@ -10,17 +10,14 @@ local function cleanDate(date_str)
     return iso:sub(1, 19)
 end
 
--- 2. Helper: Format as "Scholar" Block with Inline Anchor
--- Look:
--- [Quote Bar] "The text of the highlight..."
---             Chapter 1 • Page 12 • 2023-10-25 • Note: My thoughts ⚓
+-- Format Block with Inline Anchor
 local function formatScholarBlock(h)
     local content = {}
     
-    -- A. Main Text
+    -- Main Text
     table.insert(content, { text = { content = h.text } })
     
-    -- B. Metadata Line (Soft break \n)
+    -- Metadata Line (Soft break \n)
     local meta = "\n"
     
     -- Add Chapter if it exists
@@ -40,7 +37,7 @@ local function formatScholarBlock(h)
         annotations = { color = "gray", italic = true }
     })
 
-    -- C. The ID Anchor (Hidden)
+    -- The ID Anchor (Hidden)
     table.insert(content, { text = { content = "  " } })
     table.insert(content, {
         text = { 
@@ -59,7 +56,7 @@ local function formatScholarBlock(h)
     }
 end
 
--- 3. Helper: Scan block for ID (SAFE)
+-- Extract ID from block
 local function extractIdFromBlock(block)
     if not block or block.type ~= "quote" then return nil end
     if not block.quote or not block.quote.rich_text then return nil end
@@ -85,7 +82,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     logger.info("NotionSync: " .. title)
     if yield_func then yield_func() end
 
-    -- A. Find/Create Page
+    -- Find/Create Page
     local page, err = client:findPage(title)
     if not page and err then return { success = false, msg = tostring(err) } end
 
@@ -93,7 +90,9 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     local last_sync_raw = nil
     if page then
         page_id = page.id
-        if page.properties["Last Sync"] then last_sync_raw = page.properties["Last Sync"].date and page.properties["Last Sync"].date.start end
+        if page.properties["Last Sync"] and page.properties["Last Sync"].rich_text and #page.properties["Last Sync"].rich_text > 0 then
+            last_sync_raw = page.properties["Last Sync"].rich_text[1].plain_text
+        end
     else
         local new_p, c_err = client:createPage(title)
         if not new_p then return { success = false, msg = tostring(c_err) } end
@@ -101,7 +100,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     end
     if yield_func then yield_func() end
 
-    -- B. Scan Page Blocks (Flat Scan - Much Faster)
+    -- Scan Page Blocks (Flat Scan - Much Faster)
     logger.info("NotionSync: Scanning blocks...")
     local page_blocks, bl_err = client:getBlockChildren(page_id)
     if not page_blocks then return { success = false, msg = tostring(bl_err) } end
@@ -114,7 +113,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     
     if yield_func then yield_func() end
 
-    -- C. Process Highlights
+    -- Process Highlights
     local last_sync_clean = cleanDate(last_sync_raw) or "1970-01-01T00:00:00"
     local max_updated_at = last_sync_clean
     local count_new = 0
@@ -124,13 +123,17 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     for _, h in ipairs(payload.highlights) do
         local h_iso = cleanDate(h.updated_at)
         
-        -- Update high-water mark
-        if h_iso > max_updated_at then max_updated_at = h_iso end
+        -- Track the latest updated highlight to update the cursor
+        if h_iso > max_updated_at then 
+            max_updated_at = h_iso 
+        end
 
         local existing_block_id = existing_ids[h.id]
 
         if existing_block_id then
             -- UPDATE Existing
+            logger.info("NotionSync: Last sync: " .. last_sync_clean)
+            logger.info("NotionSync: Last sync: " .. h_iso)
             if h_iso > last_sync_clean then
                 -- Re-generate the full block content (text + footer + anchor)
                 local updated_struct = formatScholarBlock(h)
@@ -146,7 +149,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
         end
     end
 
-    -- D. Append New (Batch)
+    -- Append New
     if #batch_append > 0 then
         local chunk = 100
         for i=1, #batch_append, chunk do
@@ -160,7 +163,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
         end
     end
 
-    -- E. Update Cursor
+    -- Update Cursor
     if max_updated_at > last_sync_clean then
         client:updateLastSync(page_id, max_updated_at)
     end

@@ -132,8 +132,6 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
 
         if existing_block_id then
             -- UPDATE Existing
-            logger.info("NotionSync: Last sync: " .. last_sync_clean)
-            logger.info("NotionSync: Last sync: " .. h_iso)
             if h_iso > last_sync_clean then
                 -- Re-generate the full block content (text + footer + anchor)
                 local updated_struct = formatScholarBlock(h)

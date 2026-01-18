@@ -30,7 +30,7 @@ return {
     main_file = "main.lua",
     
     -- Plugin configuration file
-    config_file = "config.json",
+    config_file = "plugins/notionsync.koplugin/config.json",
     
     -- Plugin capabilities
     capabilities = {

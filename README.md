@@ -1,178 +1,103 @@
 # NotionSync for KOReader
 
-**NotionSync** is a powerful plugin for **KOReader** that automatically synchronizes your book highlights and notes directly to a **Notion database**. It transforms your reading data into organized, actionable knowledge by creating a dedicated page for each book and populating it with your annotations.
+**NotionSync** is a powerful plugin for **KOReader** that automatically synchronizes your book highlights and notes directly to a **Notion database**. 
 
 ---
 
 ## ✨ Features
 
-- 📚 **Automatic Page Management**  
-  Creates a new page in your Notion database for every book you sync. If the page already exists, it intelligently updates it.
+- 📚 **Rich Metadata Sync**  (New!)
+  Automatically populates the following fields in your Notion database (if columns exist), they're:
+  - **Authors** (Supports `Multi-select` tags or `Text`)
+  - **ISBN** (Robust extraction from book files)
+  - **Progress** (Real-time reading percentage, derived from book stats or metadata)
+  - **Language** (e.g., "en", "es")
+  - **Pages** (Total page count)
+  - **Start Reading** (Date you started the book)
 
-- 🔄 **Smart Syncing**  
-  Only uploads new or modified highlights. It keeps track of the last sync time to avoid duplicates.
+- 🔄 **Smart & Robust Sync**  
+  - **Dynamic Schema Detection**: The plugin checks your Notion database types before syncing.
+  - **Crash-Proof**: If a column is missing or has the wrong type (e.g., "Pages" is text instead of number), the plugin adapts its payload automatically to prevent errors.
+  - **Live Progress**: Calculates reading progress live from the document, falling back to disk metadata if needed.
 
 - 📝 **Rich Formatting**  
-  Highlights are formatted as bullet points, including your personal notes, page numbers, and chapter information.
+  Highlights are formatted as "Scholar blocks" (Quote style) including page number, chapter, date, and a hidden link to the highlight anchor.
 
 - ⚡ **One-Click Sync**  
-  Integrated directly into the KOReader **Tools** menu for quick access. Supports gesture triggers (e.g., tap corner to sync).
-
-- ⚙️ **Easy Configuration**  
-  Built-in settings menu to configure your Notion Token and select your target database directly on your e-reader.
-
----
-
-## Screenshots
-
-### KOReader Interface
-
-<a href="https://i.ibb.co/Z1xNPV6H/koreader-notion-sync-sync.png"><img src="https://i.ibb.co/Z1xNPV6H/koreader-notion-sync-sync.png" alt="" width="200px"></a>
-<a href="https://i.ibb.co/xKYPVCsy/koreader-notion-sync-set-token.png"><img src="https://i.ibb.co/xKYPVCsy/koreader-notion-sync-set-token.png" alt="" width="200px"></a>
-<a href="https://i.ibb.co/3mXwXjXF/koreader-notion-sync-settings.png"><img src="https://i.ibb.co/3mXwXjXF/koreader-notion-sync-settings.png" alt="" width="200px"></a>
-<a href="https://i.ibb.co/n8KrDhKc/koreader-notion-sync-settings-menu.png"><img src="https://i.ibb.co/n8KrDhKc/koreader-notion-sync-settings-menu.png" alt="" width="200px"></a>
-<a href="https://i.ibb.co/8tjvYJ0/koreader-notion-sync-gestures.png"><img src="https://i.ibb.co/8tjvYJ0/koreader-notion-sync-gestures.png" alt="" width="200px"></a>
-<a href="https://i.ibb.co/rR1XpLP9/koreader-notion-sync-invoke.png"><img src="https://i.ibb.co/rR1XpLP9/koreader-notion-sync-invoke.png" alt="" width="200px"></a>
-
-### Notion 
-
-<a href="https://i.ibb.co/27VqvxZZ/koreader-notion-sync-notion-database.png"><img src="https://i.ibb.co/27VqvxZZ/koreader-notion-sync-notion-database.png" alt="" width="900px"></a>
-
----
-
-## 🚀 Installation
-
-### 1. Download the Plugin
-Download the latest `notionsync.koplugin.zip` from the **Releases** page  
-(or clone this repository).
-
-### 2. Transfer to Device
-1. Connect your KOReader device (Kindle, Kobo, Android, etc.) to your computer via USB.
-2. Navigate to the following directory on your device:
-```
-
-koreader/plugins/
-
-```
-3. Extract the downloaded zip file here.  
-You should end up with a folder named:
-```
-
-notionsync.koplugin
-
-```
-
-> **Tip**: Before you restart your KOReader, you can set up the `notion_token` in the `config.json` file on your computer after setting up Notion. This way you will not need to type the token at your KOReader.
-
-### 3. Restart KOReader
-Eject your device and restart KOReader to load the new plugin.
+  Integrated directly into the KOReader **Tools** menu. Supports gesture triggers.
 
 ---
 
 ## 🛠️ Notion Setup
 
-Before using the plugin, you need to set up a dedicated database in Notion and get an API token.
+For the best experience, create a Notion Database with the following columns. **All metadata columns are optional**—if you don't add them, the plugin simply skips them.
 
-### 1. Create a Notion Integration
-1. Go to **Notion → My Integrations**.
-2. Click **+ New integration**.
-3. Name it (e.g., `KOReader Sync`).
-4. Select the associated workspace.
-5. Click **Submit**.
-6. Copy the **Internal Integration Secret** (starts with `ntn_...`).  
-You will need this later.
-
-### 2. Create the Database
-1. In Notion, create a new page.
-2. Add a **Table view database** (or use an existing one).
-
-#### Required Properties
-Make sure your database includes the following properties:
-
-| Property Name | Type  | Description |
+| Property Name | Verified Types | Description |
 |--------------|-------|-------------|
-| **Name**     | Title | Book title |
-| **Last Sync**| Date  | Required. Used to track the last update |
+| **Name**     | Title | **Required**. Book title. |
+| **Last Sync**| Text  | **Required**. Used to track updates. |
+| **Authors**  | Multi-select *or* Text | Smart splitting of multiple authors (e.g. "Author A; Author B"). |
+| **ISBN**     | Text  | The book's ISBN. |
+| **Progress** | Number *or* Text | Reading percentage (0.0 to 1.0). Best formatted as `%` in Notion. |
+| **Language** | Select *or* Text | Language code (e.g., `en`). |
+| **Pages**    | Number *or* Text | Total pages in the book. |
+| **Start Reading** | Date | Date the book was first opened/highlighted. |
 
-> Optional: You may add other properties such as **Author** (Text), but the plugin primarily writes to the page content.
-
-### 3. Connect the Integration
-1. Open your database page.
-2. Click the **three dots (⋯)** in the top-right corner.
-3. Scroll to **Connect to** / **Add connections**.
-4. Select the `KOReader Sync` integration you created earlier.
-
-> ⚠️ **Important:** If you skip this step, the plugin will not be able to find your database.
+> **Note**: Column names in Notion Database are **case-insensitive** (e.g., "progress", "Progress", "PROGRESS" all work).
 
 ---
 
-## ⚙️ Plugin Configuration
+## 🚀 Installation
 
-Configure the plugin directly on your device.
+### 1. Download
+Download the latest `notionsync.koplugin.zip` from the **Releases** page (or clone this repo).
 
-1. Open **KOReader**.
-2. Go to the **Tools** menu (screwdriver / wrench icon). 
-3. Go to second page, then **More tools**
-4. Tap **NotionSync Settings**.
+### 2. Install on Device
+1. Connect your KOReader device via USB.
+2. Navigate to `koreader/plugins/`.
+3. Extract the `notionsync.koplugin` folder there.
 
-### Set Notion Token
+### 3. Restart KOReader
+Eject and restart your device.
 
-If you didn't set it up in `config.json` you can also set token here.
+---
 
-1. Tap **Set Notion Token**.
-2. Enter your `ntn_...` key from Notion.
-3. Tap **Save**.
+## ⚙️ Configuration
 
-
-### Select Database
-1. Ensure **Wi-Fi is ON**.
-2. Tap **Select Database**.
-3. Choose your target database from the fetched list.
+1. **Get Notion Token**: Go to [Notion My Integrations](https://www.notion.so/my-integrations), create a new integration, and copy the Secret (`ntn_...`).
+2. **Connect Database**: Open your Notion Database page -> **... (menu)** -> **Connect to** -> Select your integration.
+3. **Configure on Device**:
+   - Open any book in KOReader.
+   - Go to **Tools (Gear/Wrench)** -> (Page 2) -> **More tools** -> **NotionSync Settings**.
+   - **Set Notion Token**: Enter your key.
+   - **Select Database**: Pick your database from the list.
 
 ---
 
 ## 📖 Usage
 
 ### Manual Sync
-1. Open a book in KOReader.
-2. Open the **Book** menu, go to Second page.
-3. Tap **NEW: Sync to Notion**.
-4. A popup will show sync progress (e.g., *“Syncing highlights to Notion…”*).
-5. On success, you’ll see a message like:
-```
+1. Open a book.
+2. Go to **Book Menu** (second tab usually).
+3. Tap **Sync to Notion**.
+4. Watch the magic happen! 
 
-Success! New: 5, Updated: 0
-
-```
-
-### Gesture Sync (Optional)
-Assign syncing to a gesture for instant access.
-
-1. Go to **Settings (⚙️)** → **Taps and gestures** → **Gesture manager**.
-2. Select a trigger (e.g., **Tap corner → Bottom-right**).
-3. Choose **General -> Sync to Notion** from the action list (3rd page).
-
-Now, simply tap that corner to sync your current book 📲
+### Gesture Sync
+You can assign "Sync to Notion" to a corner tap in **Settings -> Taps and gestures -> Gesture manager**.
 
 ---
 
 ## ❓ Troubleshooting
 
-- **“No databases found”**  
-Ensure you connected your integration to the database using **Connect to** in Notion.
+- **"HTTP 400 Bad Request"**:
+  - This usually means a mismatch between data sent and Notion's expectations.
 
-- **“Connection Error”**  
-Check that Wi-Fi is enabled and your device has internet access.
-
-- **“Sync Failed”**  
-Inspect the `crash.log` file in your KOReader folder for detailed error messages.
+- **Missing Progress/Metadata?**:
+  - Ensure the column names in Notion match (e.g., "Authors", "ISBN").
+  - Check `notion_debug.log` to see if the plugin found the values (search for `NotionSync Payload`).
 
 ---
 
-## 📄 License
-
-This project is licensed under the **MIT License**.
-
----
-
-**Happy Reading & Syncing! 📚✨**
+## 📄 License & Credits
+Licensed under **MIT**.
+Based on the original work of [previous authors], significantly enhanced with metadata extraction and robust syncing capabilities.

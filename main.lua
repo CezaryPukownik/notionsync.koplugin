@@ -3,7 +3,7 @@ local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
-local logger = require("logger")
+local logger = require("custom_logger")
 local json = require("json")
 local NetworkMgr = require("ui/network/manager")
 local Dispatcher = require("dispatcher")
@@ -260,6 +260,70 @@ function NotionSync:onSyncRequested()
     local payload, err = GetHighlights.transform(doc, annotations)
     
     if not payload then self:notify(err or "Error extracting highlights") return end
+
+    -- Add Progress (Protected Call)
+    local progress = 0
+    pcall(function()
+         -- 1. Try calculation from summary OR direct methods (Stronger Doc Option)
+         local current_page = 0
+         local total_pages = 0
+         
+         -- Try getting pages from summary
+         if doc.info and doc.info.summary then
+             current_page = doc.info.summary.curr_page or 0
+             total_pages = doc.info.summary.num_pages or 0
+         end
+
+         -- If summary missing/zero, try direct doc methods/properties
+         if total_pages == 0 and doc.getTotalPages then
+             total_pages = doc:getTotalPages()
+         elseif total_pages == 0 and doc.info and doc.info.number_of_pages then
+             total_pages = doc.info.number_of_pages
+         end
+         
+         if current_page == 0 and doc.getCurrentPage then
+             current_page = doc:getCurrentPage()
+         end
+         
+         if total_pages > 0 and current_page > 0 then
+             progress = math.floor((current_page / total_pages) * 100) / 100
+         end
+         
+         -- 2. Fallback: Try reading pre-calculated percent from settings or props OR FILE
+         if progress == 0 then
+             local pf = nil
+             if doc.settings and doc.settings.percent_finished then pf = doc.settings.percent_finished end
+             if not pf and doc.percent_finished then pf = doc.percent_finished end
+             if not pf and doc.props and doc.props.percent_finished then pf = doc.props.percent_finished end
+             
+             if pf then
+                progress = math.floor(pf * 100) / 100
+             end
+         end
+         
+         -- 3. PLAN B: File Read
+         if progress == 0 and doc.file then
+            local sdr_path = doc.file .. ".sdr"
+            local meta_name = "metadata" .. (doc.file:match("%.([^%.]+)$") or "") .. ".lua"
+            local meta_path = sdr_path .. "/" .. meta_name
+            
+            -- Check file existence via lfs
+            local lfs = require("libs/libkoreader-lfs")
+            if lfs.attributes(meta_path) then
+                 pcall(function()
+                     local chunk = loadfile(meta_path)
+                     if chunk then
+                         local meta_data = chunk()
+                         if meta_data and meta_data.percent_finished then
+                             progress = math.floor(meta_data.percent_finished * 100) / 100
+                         end
+                     end
+                 end)
+            end
+        end
+    end) 
+
+    payload.progress = progress
 
     local loading_popup = InfoMessage:new{
         text = "Syncing highlights to Notion...",

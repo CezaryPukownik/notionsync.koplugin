@@ -13,6 +13,11 @@
 - **Rich Metadata Sync**: Automatically fills in book info like authors, ISBN, reading progress, language, pages, and start date (if those columns exist in selected database).
 - **One-Click Sync**: You can asign the sync as gesture (for example as corner click) to quickly sync your highlights.
 
+## Roadmap to v0.3.0
+
+- [ ] **Improve performance**: Implement caching to reduce API requests and improve sync speeds, particularly when working with a large number of highlights. 
+- [ ] **Optional metadata sync**: A configurable setting that lets you choose whether to populate the metadata columns, even if they already exist.
+
 ## ️ Notion Setup
 
 Create a Notion Database with the following columns. **All metadata columns are optional**—if you don't add them, the plugin simply skips them.

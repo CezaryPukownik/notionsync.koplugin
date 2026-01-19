@@ -60,9 +60,6 @@ Create a Notion Database with the following columns. **All metadata columns are 
 2. Go to **Tools Menu**.
 3. Tap **NotionSync > Sync Highlights to Notion**.
 
-### Gesture Sync
-You can assign "Sync to Notion" to a corner tap in **Settings -> Taps and gestures -> Gesture manager**.
-
 ### Sync all books
 
 From version v0.2.0 you can sync all books from you history that contains highlights. To sync all books. For example for initial load when you want to dump all you current highlights to Notion you can.
@@ -72,3 +69,5 @@ From version v0.2.0 you can sync all books from you history that contains highli
 > [!WARNING]
 > Depending on you history size, this process can take a while.
 
+### Gesture Sync
+You can assign "Sync to Notion" to a corner tap in **Settings -> Taps and gestures -> Gesture manager**.

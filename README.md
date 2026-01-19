@@ -2,35 +2,20 @@
 
 **NotionSync** is a powerful plugin for **KOReader** that automatically synchronizes your book highlights and notes directly to a **Notion database**. 
 
----
+> [!IMPORTANT]
+> To upgrade to v0.2.0 "Gwyhyr" you will need to change the type of the *Last Sync* column from *Date* to *Text* in your Notion Database. See the details [here](https://github.com/CezaryPukownik/notionsync.koplugin/pull/5)
 
-## ✨ Features
+## Features
 
-- 📚 **Rich Metadata Sync**  (New!)
-  Automatically populates the following fields in your Notion database (if columns exist), they're:
-  - **Authors** (Supports `Multi-select` tags or `Text`)
-  - **ISBN** (Robust extraction from book files)
-  - **Progress** (Real-time reading percentage, derived from book stats or metadata)
-  - **Language** (e.g., "en", "es")
-  - **Pages** (Total page count)
-  - **Start Reading** (Date you started the book)
+- **Sync All Highlights**: Instantly export all your highlights and notes to your Notion database.
+- **Incremental Updates**: Only new or changed highlights are synced for efficiency.
+- **Rich Formatting**: Highlights are formatted into blocks including page number, chapter, date, your notes and a hidden link to the highlight anchor.
+- **Rich Metadata Sync**: Automatically fills in book info like authors, ISBN, reading progress, language, pages, and start date (if those columns exist in selected database).
+- **One-Click Sync**: You can asign the sync as gesture (for example as corner click) to quickly sync your highlights.
 
-- 🔄 **Smart & Robust Sync**  
-  - **Dynamic Schema Detection**: The plugin checks your Notion database types before syncing.
-  - **Crash-Proof**: If a column is missing or has the wrong type (e.g., "Pages" is text instead of number), the plugin adapts its payload automatically to prevent errors.
-  - **Live Progress**: Calculates reading progress live from the document, falling back to disk metadata if needed.
+## ️ Notion Setup
 
-- 📝 **Rich Formatting**  
-  Highlights are formatted as "Scholar blocks" (Quote style) including page number, chapter, date, and a hidden link to the highlight anchor.
-
-- ⚡ **One-Click Sync**  
-  Integrated directly into the KOReader **Tools** menu. Supports gesture triggers.
-
----
-
-## 🛠️ Notion Setup
-
-For the best experience, create a Notion Database with the following columns. **All metadata columns are optional**—if you don't add them, the plugin simply skips them.
+Create a Notion Database with the following columns. **All metadata columns are optional**—if you don't add them, the plugin simply skips them.
 
 | Property Name | Verified Types | Description |
 |--------------|-------|-------------|
@@ -45,9 +30,7 @@ For the best experience, create a Notion Database with the following columns. **
 
 > **Note**: Column names in Notion Database are **case-insensitive** (e.g., "progress", "Progress", "PROGRESS" all work).
 
----
-
-## 🚀 Installation
+## Installation
 
 ### 1. Download
 Download the latest `notionsync.koplugin.zip` from the **Releases** page (or clone this repo).
@@ -60,9 +43,7 @@ Download the latest `notionsync.koplugin.zip` from the **Releases** page (or clo
 ### 3. Restart KOReader
 Eject and restart your device.
 
----
-
-## ⚙️ Configuration
+## ️ Setup
 
 1. **Get Notion Token**: Go to [Notion My Integrations](https://www.notion.so/my-integrations), create a new integration, and copy the Secret (`ntn_...`).
 2. **Connect Database**: Open your Notion Database page -> **... (menu)** -> **Connect to** -> Select your integration.
@@ -72,32 +53,22 @@ Eject and restart your device.
    - **Set Notion Token**: Enter your key.
    - **Select Database**: Pick your database from the list.
 
----
+## Usage
 
-## 📖 Usage
-
-### Manual Sync
+### Sync current book
 1. Open a book.
-2. Go to **Book Menu** (second tab usually).
-3. Tap **Sync to Notion**.
-4. Watch the magic happen! 
+2. Go to **Tools Menu**.
+3. Tap **NotionSync > Sync Highlights to Notion**.
 
 ### Gesture Sync
 You can assign "Sync to Notion" to a corner tap in **Settings -> Taps and gestures -> Gesture manager**.
 
----
+### Sync all books
 
-## ❓ Troubleshooting
+From version v0.2.0 you can sync all books from you history that contains highlights. To sync all books. For example for initial load when you want to dump all you current highlights to Notion you can.
+1. Go to **Top Menu > Tools**
+2. Tap **NotionSync > Sync All Highlights to Notion**. 
 
-- **"HTTP 400 Bad Request"**:
-  - This usually means a mismatch between data sent and Notion's expectations.
+> [!WARNING]
+> Depending on you history size, this process can take a while.
 
-- **Missing Progress/Metadata?**:
-  - Ensure the column names in Notion match (e.g., "Authors", "ISBN").
-  - Check `notion_debug.log` to see if the plugin found the values (search for `NotionSync Payload`).
-
----
-
-## 📄 License & Credits
-Licensed under **MIT**.
-Based on the original work of [previous authors], significantly enhanced with metadata extraction and robust syncing capabilities.

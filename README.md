@@ -37,16 +37,11 @@ Create a Notion Database with the following columns. **All metadata columns are 
 
 ## Installation
 
-### 1. Download
-Download the latest `notionsync.koplugin.zip` from the **Releases** page (or clone this repo).
-
-### 2. Install on Device
-1. Connect your KOReader device via USB.
-2. Navigate to `koreader/plugins/`.
-3. Extract the `notionsync.koplugin` folder there.
-
-### 3. Restart KOReader
-Eject and restart your device.
+1. Download the latest `notionsync.koplugin.zip` from the **Releases** page (or clone this repo).
+2. Connect your KOReader device via USB.
+3. Navigate to `koreader/plugins/`.
+4. Extract the `notionsync.koplugin` folder there.
+5. Restart KOReader
 
 ## ️ Setup
 

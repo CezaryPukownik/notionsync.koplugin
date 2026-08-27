@@ -137,7 +137,7 @@ function GetHighlights.transform(doc, raw_annotations)
     
     local first_highlight_date = nil
     
-    for _, item in pairs(raw_annotations) do
+    for _, item in ipairs(raw_annotations) do
         -- Generate ID: md5(filepath + datetime)
         local created_at = item.datetime or ""
         
@@ -170,6 +170,32 @@ function GetHighlights.transform(doc, raw_annotations)
         table.insert(clean_highlights, entry)
     end
     
+    -- Order the highlights by when they were actually made.
+    --
+    -- KOReader keeps `annotations` ordered by position in the document, and
+    -- sync_manager appends each new highlight as a `quote` block on the book's
+    -- Notion page. Blocks on a page cannot be reordered from the Notion UI the
+    -- way database rows can be sorted, so whatever order they are inserted in
+    -- is the order they keep. For a book read straight through the two orders
+    -- agree; jump around, re-read a chapter, or highlight something on a
+    -- second pass and they diverge -- permanently, on the page.
+    --
+    -- `datetime` is "YYYY-MM-DD HH:MM:SS", so a plain string compare is already
+    -- chronological. Entries without one sort last rather than randomly, and
+    -- position is the tiebreak so the result is stable across runs.
+    table.sort(clean_highlights, function(a, b)
+        local a_at, b_at = a.created_at or "", b.created_at or ""
+        if a_at ~= b_at then
+            if a_at == "" then return false end
+            if b_at == "" then return true end
+            return a_at < b_at
+        end
+        local a_page = tonumber(a.page) or 0
+        local b_page = tonumber(b.page) or 0
+        if a_page ~= b_page then return a_page < b_page end
+        return (a.id or "") < (b.id or "")
+    end)
+
     -- Fallback Start Date
     if start_date == "" and first_highlight_date then
         start_date = first_highlight_date

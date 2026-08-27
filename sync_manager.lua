@@ -122,6 +122,16 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     -- LOG PAYLOAD
     logger.info("NotionSync Payload: Pages=" .. tostring(payload.pages) .. ", Lang=" .. tostring(payload.language) .. ", Start=" .. tostring(payload.start_date))
 
+    -- Notion rejects a select/multi_select option whose name contains a comma
+    -- ("Invalid select option, commas not allowed", HTTP 400). Book metadata
+    -- hits this constantly: "Fisher, Roger; Ury, William L." is one author list
+    -- with two commas in it. Strip them and tidy the leftover whitespace.
+    local function cleanOptionName(name)
+        local clean = tostring(name):gsub(",", " ")
+        clean = clean:gsub("%s+", " "):match("^%s*(.-)%s*$")
+        return clean
+    end
+
     -- Helper to format value based on Notion Type
     local function formatValue(key, val_type, value)
         if not value or value == "" then return nil end
@@ -131,7 +141,7 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
         elseif val_type == "number" then
             return { number = tonumber(value) }
         elseif val_type == "select" then
-            return { select = { name = tostring(value) } }
+            return { select = { name = cleanOptionName(value) } }
         elseif val_type == "multi_select" then
             -- If value is a simple string, make it a single tag, or split if it looks like a list
             local tags = {}
@@ -143,7 +153,8 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
                      if clean and clean ~= "" then table.insert(tags, { name = clean }) end
                 end
             else
-                table.insert(tags, { name = val_str })
+                local clean = cleanOptionName(val_str)
+                if clean ~= "" then table.insert(tags, { name = clean }) end
             end
             return { multi_select = tags }
         elseif val_type == "date" then
@@ -205,7 +216,13 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
         
         -- UPDATE PROPERTIES for existing page
         if next(extra_props) ~= nil then
-            client:updatePageProperties(page_id, extra_props)
+            -- Non-fatal: highlights are the point, properties are decoration.
+            -- Logged rather than swallowed -- a silent failure here is what made
+            -- the comma bug present as "some books just don't sync".
+            local _, prop_err = client:updatePageProperties(page_id, extra_props)
+            if prop_err then
+                logger.warn("NotionSync: could not update page properties: " .. tostring(prop_err))
+            end
         end
     else
         local new_p, c_err = client:createPage(title, extra_props)

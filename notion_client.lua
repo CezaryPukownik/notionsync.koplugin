@@ -68,7 +68,15 @@ function NotionClient:request(method, endpoint, body_table)
     if code ~= 200 then
         local response_str = table.concat(response_body)
         logger.warn("NotionSync HTTP Error Body: " .. response_str)
-        return nil, "HTTP " .. tostring(code) .. ": " .. tostring(status)
+        -- Notion explains itself in the body ("Invalid select option, commas not
+        -- allowed"). Surfacing only "HTTP 400" leaves that in the log where the
+        -- user never looks, so lift the message into the returned error.
+        local detail
+        local ok_decode, parsed = pcall(json.decode, response_str)
+        if ok_decode and type(parsed) == "table" and type(parsed.message) == "string" then
+            detail = parsed.message
+        end
+        return nil, "HTTP " .. tostring(code) .. ": " .. tostring(detail or status)
     end
 
     local response_str = table.concat(response_body)

@@ -322,6 +322,83 @@ function NotionSync:syncOneBook(doc, annotations, yield_func)
     return result
 end
 
+-- Minimum seconds between two consecutive close-triggered syncs of the same
+-- book. Opening and closing a book repeatedly should not mean a Notion write
+-- every time. In-memory on purpose: the window only matters within a session.
+local AUTO_CLOSE_COOLDOWN = 300
+
+--- Send an already-built payload without blocking the caller.
+--- Used by the close trigger, where the UI must not stall on network I/O.
+function NotionSync:syncPayloadInBackground(payload, book_label)
+    local co = coroutine.create(function()
+        local yield_func = function() coroutine.yield() end
+        local result = SyncManager.sync(self.client, payload, nil, yield_func)
+        if result and result.success then
+            logger.info(string.format(
+                "NotionSync: auto-sync on close ok book=%s new=%d updated=%d",
+                tostring(book_label), result.new or 0, result.updated or 0))
+        else
+            logger.warn("NotionSync: auto-sync on close failed: "
+                .. tostring(result and result.msg or "unknown"))
+        end
+    end)
+
+    local function pump()
+        if coroutine.status(co) == "suspended" then
+            local ok, res = coroutine.resume(co)
+            if not ok then
+                logger.err("NotionSync: auto-sync on close crashed: " .. tostring(res))
+            else
+                UIManager:nextTick(pump)
+            end
+        end
+    end
+    UIManager:nextTick(pump)
+end
+
+--- Sync the just-closed book, when the user opted in and Wi-Fi is already up.
+---
+--- Deliberately does NOT call NetworkMgr:enableWifi(): closing a book should
+--- never bring the radio up on its own. Offline closes are skipped silently --
+--- the next manual sync picks the highlights up.
+---
+--- The payload is built here, synchronously, because the document is torn
+--- down as soon as this handler returns and GetHighlights.transform() needs a
+--- live doc (it calls doc:getProps()). Only the network round-trip is deferred.
+function NotionSync:onCloseDocument()
+    if not G_reader_settings:isTrue("notionsync_auto_sync_on_close") then return end
+    if not NetworkMgr:isOnline() then return end
+    if not self.client or not self.config.database_id or self.config.database_id == "" then
+        return
+    end
+
+    local doc = self.ui.document
+    local annotations = self.ui.annotation and self.ui.annotation.annotations
+    if not doc then return end
+    if not annotations or next(annotations) == nil then return end
+
+    local book_path = doc.file or ""
+    local now = os.time()
+    self.last_close_sync = self.last_close_sync or {}
+    local last = self.last_close_sync[book_path]
+    if last and (now - last) < AUTO_CLOSE_COOLDOWN then
+        logger.info("NotionSync: auto-sync on close skipped (cooldown) book=" .. book_path)
+        return
+    end
+
+    local ok, payload = pcall(GetHighlights.transform, doc, annotations)
+    if not ok or not payload then
+        logger.warn("NotionSync: auto-sync on close could not build payload: "
+            .. tostring(not ok and payload or "empty"))
+        return
+    end
+    local ok_progress, progress = pcall(calculateProgress, doc)
+    if ok_progress then payload.progress = progress end
+
+    self.last_close_sync[book_path] = now
+    self:syncPayloadInBackground(payload, book_path)
+end
+
 -- Get all books from history
 function NotionSync:getAllBooks()
     local books = {}

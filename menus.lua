@@ -19,6 +19,16 @@ function Menus.register(plugin, menu_items)
                 end
             },
             {
+                text = "Auto-sync on book close",
+                checked_func = function()
+                    return G_reader_settings:isTrue("notionsync_auto_sync_on_close")
+                end,
+                callback = function()
+                    G_reader_settings:flipNilOrFalse("notionsync_auto_sync_on_close")
+                end,
+                help_text = "Sync the book you just closed, automatically. Runs only when Wi-Fi is already on -- closing a book never switches the radio on by itself, and an offline close is skipped silently. Repeat closes of the same book are rate-limited to one sync every 5 minutes.",
+            },
+            {
                 text = "Settings",
                 callback = function()
                     plugin:showConfigMenu()

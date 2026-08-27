@@ -514,6 +514,78 @@ function NotionSync:onSyncRequested()
     UIManager:nextTick(pump)
 end
 
+--- Rewrite the current book's Notion page so its quotes sit in reading order.
+---
+--- Only needed for pages built before ordered inserts existed: the Notion API
+--- cannot move a block, so a shuffled page has to be deleted and recreated.
+--- Destructive enough to be manual and confirmed rather than automatic.
+function NotionSync:onRebuildPageOrder()
+    if not NetworkMgr:isOnline() then
+        NetworkMgr:enableWifi()
+        return
+    end
+
+    if not self.client or not self.config.database_id or self.config.database_id == "" then
+        self:notify("Plugin not configured. Check settings.")
+        self:showConfigMenu()
+        return
+    end
+
+    local doc = self.ui.document
+    local annotations = self.ui.annotation and self.ui.annotation.annotations
+    if not doc then self:notify("No document open") return end
+    if not annotations or next(annotations) == nil then
+        self:notify("No annotations found in current book")
+        return
+    end
+
+    local payload, perr = GetHighlights.transform(doc, annotations)
+    if not payload then
+        self:notify("Could not read highlights: " .. tostring(perr))
+        return
+    end
+
+    UIManager:show(ConfirmBox:new{
+        text = string.format(
+            "Rebuild this book's Notion page?\n\n"
+            .. "%d highlights will be deleted and recreated in reading order.\n\n"
+            .. "The text comes from this device, so nothing is lost -- but any "
+            .. "comments you left on those blocks in Notion will be.",
+            #payload.highlights),
+        ok_text = "Rebuild",
+        ok_callback = function()
+            local popup = InfoMessage:new{ text = "Rebuilding page order...", timeout = nil }
+            UIManager:show(popup)
+
+            local co = coroutine.create(function()
+                local yield_func = function() coroutine.yield() end
+                local result = SyncManager.rebuild(self.client, payload, yield_func)
+                if popup then UIManager:close(popup) end
+                if result.success then
+                    coroutine.yield()
+                    self:notify(string.format("Rebuilt: %d highlights in reading order", result.added))
+                else
+                    self:notify("Rebuild failed: " .. tostring(result.msg))
+                end
+            end)
+
+            local function pump()
+                if coroutine.status(co) == "suspended" then
+                    local ok, res = coroutine.resume(co)
+                    if not ok then
+                        if popup then UIManager:close(popup) end
+                        logger.err("NotionSync rebuild crash: " .. tostring(res))
+                        self:notify("Crash: " .. tostring(res))
+                    else
+                        UIManager:nextTick(pump)
+                    end
+                end
+            end
+            UIManager:nextTick(pump)
+        end,
+    })
+end
+
 -- Load document and annotations from file path
 local function loadBookFromPath(file_path)
     local DocSettings = require("docsettings")

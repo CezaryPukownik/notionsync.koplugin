@@ -82,6 +82,73 @@ local function extractIdFromBlock(block)
     return nil
 end
 
+--- Recover the page number from an existing block.
+---
+--- formatScholarBlock() writes a grey meta line containing "Page N", so the
+--- number survives a round-trip through Notion. That is what lets a later sync
+--- work out where a new highlight belongs among blocks it did not create.
+--- Returns nil when the block predates that format or the page was unknown.
+local function extractPageFromBlock(block)
+    if not block or block.type ~= "quote" then return nil end
+    if not block.quote or not block.quote.rich_text then return nil end
+    for _, item in ipairs(block.quote.rich_text) do
+        local content = item and item.text and item.text.content
+        if content then
+            local page = content:match("Page%s+(%d+)")
+            if page then return tonumber(page) end
+        end
+    end
+    return nil
+end
+
+--- Existing quote blocks, in the order Notion returns them (= page order).
+local function collectQuoteBlocks(page_blocks)
+    local quotes = {}
+    for _, block in ipairs(page_blocks) do
+        local hid = extractIdFromBlock(block)
+        if hid then
+            table.insert(quotes, {
+                id = hid,
+                block_id = block.id,
+                page = extractPageFromBlock(block),
+            })
+        end
+    end
+    return quotes
+end
+
+--- The block a new highlight should sit after: the last existing quote whose
+--- page is not beyond it. nil means it belongs before everything.
+---
+--- Blocks with no recoverable page are skipped rather than guessed at, so a
+--- page written by an older version degrades to "append near the end" instead
+--- of scattering new highlights around it.
+local function findAnchor(existing, page)
+    local anchor = nil
+    for _, q in ipairs(existing) do
+        if q.page and page and q.page <= page then
+            anchor = q.block_id
+        end
+    end
+    return anchor
+end
+
+--- Push `blocks` in chunks of 100 (the API cap), all at the same position.
+local function appendChunked(client, page_id, blocks, opts, yield_func)
+    local chunk = 100
+    for i = 1, #blocks, chunk do
+        local sub = {}
+        for k = i, math.min(i + chunk - 1, #blocks) do table.insert(sub, blocks[k]) end
+        -- Only the first chunk carries the position; the rest follow the ones
+        -- just inserted, which is what a plain append already does.
+        local this_opts = (i == 1) and opts or nil
+        local _, err = client:appendBlockChildren(page_id, sub, this_opts)
+        if err then return err end
+        if yield_func then yield_func() end
+    end
+    return nil
+end
+
 function SyncManager.sync(client, payload, notify_func, yield_func)
     local title = payload.title
     logger.info("NotionSync: " .. title)
@@ -219,11 +286,9 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     local page_blocks, bl_err = client:getBlockChildren(page_id)
     if not page_blocks then return { success = false, msg = tostring(bl_err) } end
 
-    local existing_ids = {} 
-    for _, block in ipairs(page_blocks) do
-        local hid = extractIdFromBlock(block)
-        if hid then existing_ids[hid] = block.id end
-    end
+    local existing_quotes = collectQuoteBlocks(page_blocks)
+    local existing_ids = {}
+    for _, q in ipairs(existing_quotes) do existing_ids[q.id] = q.block_id end
     
     if yield_func then yield_func() end
 
@@ -256,22 +321,43 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
             end
         else
             -- NEW Highlight
-            table.insert(batch_append, formatScholarBlock(h))
+            table.insert(batch_append, {
+                block = formatScholarBlock(h),
+                page = tonumber(h.page),
+            })
             count_new = count_new + 1
         end
     end
 
-    -- Append New
+    -- Insert New, in place rather than at the end.
+    --
+    -- payload.highlights arrives sorted by page, so items sharing an anchor are
+    -- contiguous: walk them in runs and send one request per run. A page that
+    -- has never been synced has no anchors at all and takes a single append.
     if #batch_append > 0 then
-        local chunk = 100
-        for i=1, #batch_append, chunk do
-            local sub = {}
-            for k=i, math.min(i+chunk-1, #batch_append) do table.insert(sub, batch_append[k]) end
-            
-            local _, append_err = client:appendBlockChildren(page_id, sub)
+        local i = 1
+        while i <= #batch_append do
+            local anchor = findAnchor(existing_quotes, batch_append[i].page)
+
+            local run = { batch_append[i].block }
+            local j = i + 1
+            while j <= #batch_append and findAnchor(existing_quotes, batch_append[j].page) == anchor do
+                table.insert(run, batch_append[j].block)
+                j = j + 1
+            end
+
+            local opts = nil
+            if anchor then
+                opts = { after = anchor }
+            elseif #existing_quotes > 0 then
+                -- Sorts ahead of every existing quote.
+                opts = { before = existing_quotes[1].block_id }
+            end
+
+            local append_err = appendChunked(client, page_id, run, opts, yield_func)
             if append_err then return { success = false, msg = tostring(append_err) } end
-            
-            if yield_func then yield_func() end
+
+            i = j
         end
     end
 
@@ -281,6 +367,84 @@ function SyncManager.sync(client, payload, notify_func, yield_func)
     end
 
     return { success = true, new = count_new, updated = count_updated }
+end
+
+--- Rewrite a book's page so its quotes sit in reading order.
+---
+--- Needed because the Notion API cannot move a block once it exists: a page
+--- whose quotes were appended out of order can only be repaired by deleting
+--- them and creating them again. Non-quote blocks are left untouched.
+---
+--- Refuses to run if the page holds a quote this device doesn't know about --
+--- a highlight deleted locally but still in Notion, or one made on another
+--- device that hasn't synced here yet. Deleting those would be silent data
+--- loss, so the caller is told to sync first instead.
+function SyncManager.rebuild(client, payload, yield_func)
+    local title = payload.title
+    logger.info("NotionSync: rebuild page order for " .. tostring(title))
+
+    local page, err = client:findPage(title)
+    if not page then
+        return { success = false, msg = err and tostring(err) or "Page not found in Notion" }
+    end
+    local page_id = page.id
+
+    local page_blocks, bl_err = client:getBlockChildren(page_id)
+    if not page_blocks then return { success = false, msg = tostring(bl_err) } end
+    if yield_func then yield_func() end
+
+    local existing_quotes = collectQuoteBlocks(page_blocks)
+    if #existing_quotes == 0 then
+        return { success = false, msg = "No highlights on the Notion page yet -- run a sync first." }
+    end
+
+    local known = {}
+    for _, h in ipairs(payload.highlights) do known[h.id] = true end
+
+    local unknown = 0
+    for _, q in ipairs(existing_quotes) do
+        if not known[q.id] then unknown = unknown + 1 end
+    end
+    if unknown > 0 then
+        return {
+            success = false,
+            msg = string.format(
+                "%d highlight(s) on the Notion page are not in this book locally. "
+                .. "Rebuilding would delete them. Sync first, or remove them in Notion.",
+                unknown),
+        }
+    end
+
+    local deleted = 0
+    for _, q in ipairs(existing_quotes) do
+        local _, del_err = client:deleteBlock(q.block_id)
+        if del_err then
+            return {
+                success = false,
+                msg = string.format("Deleted %d of %d blocks, then failed: %s. "
+                    .. "Run the rebuild again to finish.", deleted, #existing_quotes, tostring(del_err)),
+            }
+        end
+        deleted = deleted + 1
+        if yield_func then yield_func() end
+    end
+
+    local blocks = {}
+    for _, h in ipairs(payload.highlights) do
+        table.insert(blocks, formatScholarBlock(h))
+    end
+
+    local append_err = appendChunked(client, page_id, blocks, nil, yield_func)
+    if append_err then
+        return {
+            success = false,
+            msg = "Blocks were removed but re-adding them failed: " .. tostring(append_err)
+                .. ". Run a sync to restore them.",
+        }
+    end
+
+    logger.info(string.format("NotionSync: rebuild done removed=%d added=%d", deleted, #blocks))
+    return { success = true, removed = deleted, added = #blocks }
 end
 
 return SyncManager

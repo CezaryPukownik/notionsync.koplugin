@@ -138,9 +138,50 @@ function NotionClient:getBlockChildren(block_id)
     return all_results
 end
 
-function NotionClient:appendBlockChildren(block_id, blocks)
-    local body = { children = blocks }
-    return self:request("PATCH", "/blocks/" .. block_id .. "/children", body)
+--- Append blocks, optionally at a specific position.
+---
+--- `opts.after` / `opts.before` name an existing sibling to place the new
+--- blocks next to. Notion documents this as the `position` object; older API
+--- versions only understand the legacy `after` field, and some understand
+--- neither. Try them in that order and fall back to a plain append, which is
+--- always accepted and simply lands at the end of the page.
+function NotionClient:appendBlockChildren(block_id, blocks, opts)
+    local endpoint = "/blocks/" .. block_id .. "/children"
+    opts = opts or {}
+
+    local attempts
+    if opts.after then
+        attempts = {
+            { children = blocks, position = { type = "after_block", after_block = { id = opts.after } } },
+            { children = blocks, after = opts.after },
+            { children = blocks },
+        }
+    elseif opts.before then
+        attempts = {
+            { children = blocks, position = { type = "before_block", before_block = { id = opts.before } } },
+            { children = blocks },
+        }
+    else
+        attempts = { { children = blocks } }
+    end
+
+    local res, err
+    for i, body in ipairs(attempts) do
+        res, err = self:request("PATCH", endpoint, body)
+        if res then
+            if i > 1 then
+                logger.warn("NotionSync: positional append rejected, fell back to variant "
+                    .. tostring(i) .. " (page order may drift; use Rebuild page order)")
+            end
+            return res
+        end
+    end
+    return nil, err
+end
+
+--- Delete a block. Notion moves it to trash; it stops being a child.
+function NotionClient:deleteBlock(block_id)
+    return self:request("DELETE", "/blocks/" .. block_id)
 end
 
 function NotionClient:updateBlock(block_id, content)

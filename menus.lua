@@ -19,6 +19,13 @@ function Menus.register(plugin, menu_items)
                 end
             },
             {
+                text = "Rebuild page order",
+                callback = function()
+                    plugin:onRebuildPageOrder()
+                end,
+                help_text = "Deletes and recreates this book's quote blocks so they sit in reading order. Only needed for pages built before ordered inserts -- the Notion API cannot move an existing block. Text is restored from this device; Notion comments on those blocks are not.",
+            },
+            {
                 text = "Auto-sync on book close",
                 checked_func = function()
                     return G_reader_settings:isTrue("notionsync_auto_sync_on_close")

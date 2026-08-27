@@ -137,7 +137,7 @@ function GetHighlights.transform(doc, raw_annotations)
     
     local first_highlight_date = nil
     
-    for _, item in pairs(raw_annotations) do
+    for _, item in ipairs(raw_annotations) do
         -- Generate ID: md5(filepath + datetime)
         local created_at = item.datetime or ""
         
@@ -170,6 +170,33 @@ function GetHighlights.transform(doc, raw_annotations)
         table.insert(clean_highlights, entry)
     end
     
+    -- Order the highlights by their position in the book.
+    --
+    -- KOReader already keeps `annotations` in position order, but sync_manager
+    -- appends new highlights as `quote` blocks at the end of the book's Notion
+    -- page, and the Notion API cannot move a block once it exists. So the page
+    -- reflects insertion order across syncs, not reading order: highlight page
+    -- 50 today and page 10 tomorrow, and page 10 lands last, permanently.
+    --
+    -- Sorting here is what makes each sync's batch land in reading order.
+    -- `pageno` is numeric; when it is missing `page` is an xpointer string and
+    -- tonumber() yields nil, so those entries sort last and fall back to the
+    -- timestamp. Id is the final tiebreak, so runs are stable.
+    table.sort(clean_highlights, function(a, b)
+        -- math.huge, not 0: an entry with no numeric page is unplaceable, and
+        -- guessing "page zero" would park it ahead of the whole book.
+        local a_page = tonumber(a.page) or math.huge
+        local b_page = tonumber(b.page) or math.huge
+        if a_page ~= b_page then return a_page < b_page end
+        local a_at, b_at = a.created_at or "", b.created_at or ""
+        if a_at ~= b_at then
+            if a_at == "" then return false end
+            if b_at == "" then return true end
+            return a_at < b_at
+        end
+        return (a.id or "") < (b.id or "")
+    end)
+
     -- Fallback Start Date
     if start_date == "" and first_highlight_date then
         start_date = first_highlight_date
